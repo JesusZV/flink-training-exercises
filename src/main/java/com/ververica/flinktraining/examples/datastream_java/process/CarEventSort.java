@@ -38,7 +38,6 @@ public class CarEventSort {
 
 		// read parameters
 		ParameterTool params = ParameterTool.fromArgs(args);
-		String input = params.getRequired("input");
 
 		// set up streaming execution environment
 		StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
@@ -46,7 +45,7 @@ public class CarEventSort {
 		env.setParallelism(1);
 
 		// connect to the data file
-		DataStream<String> carData = env.readTextFile(input);
+		DataStream<String> carData = env.readTextFile("/Users/jesuszunigavega/Documents/flink-training/rides-data/carOutOfOrder.csv");
 
 		// map to events
 		DataStream<ConnectedCarEvent> events = carData

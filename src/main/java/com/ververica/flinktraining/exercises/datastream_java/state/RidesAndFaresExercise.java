@@ -108,7 +108,7 @@ public class RidesAndFaresExercise extends ExerciseBase {
 			TaxiFare taxiFare = taxiFareValueState.value();
 			if (taxiFare == null){ 					// no ha llegado ningún taxiFare
 				taxiRideValueState.update(ride);
-			}else{
+			}else {
 				taxiFareValueState.clear();
 				out.collect(new Tuple2<>(ride, taxiFare));
 			}
@@ -119,7 +119,7 @@ public class RidesAndFaresExercise extends ExerciseBase {
 			TaxiRide taxiRide = taxiRideValueState.value();
 			if (taxiRide == null){
 				taxiFareValueState.update(fare);
-			}else{
+			}else {
 				taxiRideValueState.clear();
 				out.collect(new Tuple2<>(taxiRide, fare));
 			}

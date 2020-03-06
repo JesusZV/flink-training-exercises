@@ -21,7 +21,8 @@ import com.ververica.flinktraining.exercises.datastream_java.datatypes.TaxiRide;
 import com.ververica.flinktraining.exercises.datastream_java.sources.TaxiFareSource;
 import com.ververica.flinktraining.exercises.datastream_java.sources.TaxiRideSource;
 import com.ververica.flinktraining.exercises.datastream_java.utils.ExerciseBase;
-import com.ververica.flinktraining.exercises.datastream_java.utils.MissingSolutionException;
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
 import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.api.java.utils.ParameterTool;
 import org.apache.flink.configuration.Configuration;
@@ -82,21 +83,58 @@ public class ExpiringStateExercise extends ExerciseBase {
 
 	public static class EnrichmentFunction extends KeyedCoProcessFunction<Long, TaxiRide, TaxiFare, Tuple2<TaxiRide, TaxiFare>> {
 
+		ValueState<TaxiRide> rideState;
+		ValueState<TaxiFare> fareState;
+
 		@Override
 		public void open(Configuration config) throws Exception {
-			throw new MissingSolutionException();
+			ValueStateDescriptor<TaxiRide> taxiRideDescriptor = new ValueStateDescriptor<>("Taxi Ride", TaxiRide.class);
+			ValueStateDescriptor<TaxiFare> taxiFareDescriptor = new ValueStateDescriptor<>("Taxi Fare", TaxiFare.class);
+
+			rideState = getRuntimeContext().getState(taxiRideDescriptor);
+			fareState = getRuntimeContext().getState(taxiFareDescriptor);
+		}
+
+		@Override
+		public void processElement1(TaxiRide ride, Context ctx, Collector<Tuple2<TaxiRide, TaxiFare>> out) throws Exception {
+			TaxiFare fare =  fareState.value();
+			if (fare != null) {
+				fareState.clear();
+				ctx.timerService().deleteEventTimeTimer(fare.getEventTime());
+				out.collect(new Tuple2(ride, fare));
+			} else {
+				rideState.update(ride);
+				// as soon as the watermark arrives, we can stop waiting for the corresponding fare
+				ctx.timerService().registerEventTimeTimer(ride.getEventTime());
+			}
+		}
+
+		@Override
+		public void processElement2(TaxiFare fare, Context ctx, Collector<Tuple2<TaxiRide, TaxiFare>> out) throws Exception {
+			TaxiRide ride = rideState.value();
+			if (ride != null) {
+				rideState.clear();
+				ctx.timerService().deleteEventTimeTimer(ride.getEventTime());
+				out.collect(new Tuple2<>(ride, fare));
+			} else {
+				fareState.update(fare);
+				// as soon as the watermark arrives, we can stop waiting for the corresponding fare
+				ctx.timerService().registerEventTimeTimer(fare.getEventTime());
+			}
 		}
 
 		@Override
 		public void onTimer(long timestamp, OnTimerContext ctx, Collector<Tuple2<TaxiRide, TaxiFare>> out) throws Exception {
-		}
 
-		@Override
-		public void processElement1(TaxiRide ride, Context context, Collector<Tuple2<TaxiRide, TaxiFare>> out) throws Exception {
-		}
+			if (fareState.value() != null) {
+				ctx.output(unmatchedFares, fareState.value());
+				fareState.clear();
+			}
+			if (rideState.value() != null) {
+				ctx.output(unmatchedRides, rideState.value());
+				rideState.clear();
+			}
 
-		@Override
-		public void processElement2(TaxiFare fare, Context context, Collector<Tuple2<TaxiRide, TaxiFare>> out) throws Exception {
 		}
 	}
 }
